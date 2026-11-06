@@ -106,7 +106,6 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
         <li><span class="sw" style="background:var(--gold)"></span>Project within 1 mi of a burn scar</li>
         <li><span class="sw" style="background:var(--cyan)"></span>Other planning project</li>
         <li><span class="sq" style="border:2px dashed #ff6a3d;background:rgba(255,106,61,.18)"></span>Past fire perimeter (NIFC)</li>
-        <li><span class="sq" style="background:rgba(240,140,40,.45)"></span>Wildland-urban interface (county)</li>
         <li><span class="fire-ic" style="width:10px;height:10px;flex:0 0 10px;margin:0 3px"></span>Satellite fire detection, last 48 h</li>
       </ul>
     </div>
@@ -122,7 +121,7 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
         <div class="kpi"><b>Within 1 mi of burn scar</b><span id="kBurn" style="color:var(--gold)">–</span><small id="kBurnS"></small></div>
         <div class="kpi"><b>Both</b><span id="kBoth" style="color:var(--red)">–</span><small id="kBothS"></small></div>
       </div>
-      <p class="note" id="wuiNote">Checking every project against the county WUI layer…</p>
+      <p class="note" id="wuiNote">Loading project snapshot…</p>
     </section>
 
     <section>
@@ -141,7 +140,6 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
       <div class="layers">
         <label><input type="checkbox" id="lyProj" checked> Planning projects</label>
         <label><input type="checkbox" id="lyBurn" checked> Burn scars</label>
-        <label><input type="checkbox" id="lyWui" checked> WUI shading</label>
         <label><input type="checkbox" id="lyFire" checked> Fire detections</label>
       </div>
       <p class="note">The county WUI layer covers much of central and northern El Paso County, so most growth there falls inside it.</p>
@@ -169,12 +167,12 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
       <ol>
         <li><a href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener">Esri World Imagery Wayback</a>, every release since Feb 2014</li>
         <li><a href="https://data-nifc.opendata.arcgis.com/" target="_blank" rel="noopener">NIFC Interagency Fire Perimeter History</a></li>
-        <li><a href="https://gisservices.elpasoco.com/arcgis2/rest/services/Public" target="_blank" rel="noopener">El Paso County public GIS services</a>: PlanningProjects, TetraTech WUI, county boundary</li>
+        <li><a href="https://gisservices.elpasoco.com/arcgis2/rest/services/Public" target="_blank" rel="noopener">El Paso County public GIS services</a>: PlanningProjects and TetraTech WUI, one-time snapshot Nov 6, 2026 (this page does not call county servers)</li>
         <li><a href="https://www.arcgis.com/home/item.html?id=dece90af1a0242dcbf0ca36d30276aa3" target="_blank" rel="noopener">NASA VIIRS thermal hotspots</a> via Esri Living Atlas, live</li>
       </ol>
     </section>
     <section>
-      <p class="disc">Independent analysis by Carlos Barrera using public data only; not an official county product. "In the WUI" means the project point falls inside a polygon of the county's public wildland-urban interface layer. Burn-scar distance is measured from the project point to the nearest NIFC perimeter. Planning projects are 2023–2026 applications in the county's public layer.</p>
+      <p class="disc">Independent analysis by Carlos Barrera using public data only; not an official county product. "In the WUI" means the project point falls inside a polygon of the county's public wildland-urban interface layer. Burn-scar distance is measured from the project point to the nearest NIFC perimeter. Planning projects are 2023–2026 applications in the county's public layer, snapshot Nov 6, 2026.</p>
     </section>
   </aside>
 </div>
@@ -182,7 +180,6 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
 <script>
 (function(){
-  var EPC='https://gisservices.elpasoco.com/arcgis2/rest/services/Public/';
   var NIFC='https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/InterAgencyFirePerimeterHistory_All_Years_View/FeatureServer/0/query';
   var VIIRS='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/Satellite_VIIRS_Thermal_Hotspots_and_Fire_Activity/FeatureServer/0/query';
   var WAYBACK='https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
@@ -235,19 +232,6 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
     document.getElementById('selL').onchange=function(){setSide('l');};document.getElementById('selR').onchange=function(){setSide('r');};
   }).catch(function(){L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{pane:'rightImg'}).addTo(map);});
 
-  /* ---------- WUI overlay (county MapServer export, redrawn on pan/zoom) ---------- */
-  var wuiImg=null;
-  function wuiRefresh(){var b=map.getBounds(),s=map.getSize(),sw=L.CRS.EPSG3857.project(b.getSouthWest()),ne=L.CRS.EPSG3857.project(b.getNorthEast());
-    var dyn=[{id:0,source:{type:'mapLayer',mapLayerId:0},drawingInfo:{renderer:{type:'simple',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[240,140,40,70],outline:{type:'esriSLS',style:'esriSLSNull',color:[0,0,0,0],width:0}}}}}];
-    var url=q(EPC+'TetraTechWUI/MapServer/export',{bbox:[sw.x,sw.y,ne.x,ne.y].join(','),bboxSR:3857,imageSR:3857,size:s.x+','+s.y,format:'png32',transparent:'true',dynamicLayers:JSON.stringify(dyn),f:'image'});
-    var next=L.imageOverlay(url,b,{pane:'wui',opacity:1,interactive:false});
-    next.once('load',function(){if(wuiImg&&wuiImg!==next)map.removeLayer(wuiImg);wuiImg=next;});next.addTo(map);}
-  map.on('moveend',wuiRefresh);wuiRefresh();
-
-  /* ---------- county boundary ---------- */
-  get('County boundary',q(EPC+'TetraTechPPROEMHazards/FeatureServer/9/query',{where:'1=1',outSR:4326,maxAllowableOffset:.0005,f:'geojson'})).then(function(j){
-    L.geoJSON(j,{interactive:false,style:{color:'#F3EEE3',weight:2,dashArray:'2 6',fill:false,opacity:.8}}).addTo(map);}).catch(function(){});
-
   /* ---------- burn scars ---------- */
   var FIRES=[],burnLayer=L.layerGroup().addTo(map);
   var firesP=get('NIFC fire perimeters',q(NIFC,{where:'1=1',geometry:CBOX.join(','),geometryType:'esriGeometryEnvelope',inSR:4326,spatialRel:'esriSpatialRelIntersects',outFields:'INCIDENT,FIRE_YEAR,GIS_ACRES',outSR:4326,maxAllowableOffset:.0002,f:'geojson'})).then(function(j){
@@ -262,31 +246,15 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
     return FIRES;
   }).catch(function(){return [];});
 
-  /* ---------- planning projects + WUI test ---------- */
-  var PROJ=[],markers=L.layerGroup().addTo(map);
-  var projP=get('County planning projects',q(EPC+'PlanningProjects/MapServer/0/query',{where:'1=1',outFields:'*',outSR:4326,f:'geojson'})).then(function(j){PROJ=j.features.filter(function(f){return f.geometry&&f.geometry.coordinates;});return PROJ;});
-
-  function wuiTest(pts){
-    var chunks=[],n=4,size=Math.ceil(pts.length/n);for(var i=0;i<pts.length;i+=size)chunks.push(pts.slice(i,i+size));
-    return Promise.all(chunks.map(function(c,i){var body=new URLSearchParams({geometry:JSON.stringify({points:c,spatialReference:{wkid:4326}}),geometryType:'esriGeometryMultipoint',inSR:'4326',spatialRel:'esriSpatialRelIntersects',outFields:'gridcode',returnGeometry:'true',outSR:'4326',maxAllowableOffset:'0.0002',geometryPrecision:'5',f:'geojson'});
-      return get('WUI test · batch '+(i+1)+' of '+chunks.length,EPC+'TetraTechPPROEMHazards/FeatureServer/1/query',{method:'POST',body:body});}))
-      .then(function(rs){var all=[];rs.forEach(function(r){all=all.concat(r.features||[]);});all.forEach(function(f){f.bbox=bboxOf(f.geometry);});return all;});
-  }
-
-  Promise.all([projP,firesP]).then(function(r){
-    var pts=PROJ.map(function(f){return f.geometry.coordinates;});
-    PROJ.forEach(function(f){var x=f.geometry.coordinates[0],y=f.geometry.coordinates[1],best=Infinity,name='';
-      FIRES.forEach(function(fi){var b=fi.bbox,bx=Math.max(0,b[0]-x,x-b[2])*85000,by=Math.max(0,b[1]-y,y-b[3])*111000;if(Math.sqrt(bx*bx+by*by)>best)return;var d=distToGeom(fi.geometry,x,y);if(d<best){best=d;name=fi.properties.INCIDENT+' '+fi.properties.FIRE_YEAR;}});
-      f.properties._burnM=best;f.properties._burnName=name;f.properties._wui=null;});
+  /* ---------- planning projects (cached snapshot, no county queries) ---------- */
+  var PROJ=[],markers=L.layerGroup().addTo(map),SNAP='front_range_watch_projects.geojson';
+  get('Cached project snapshot (WUI test pre-computed once)',SNAP).then(function(j){
+    PROJ=j.features.filter(function(f){return f.geometry&&f.geometry.coordinates;}).map(function(f){var p=f.properties;
+      return {type:'Feature',geometry:f.geometry,properties:{Project_Name:p.project_name,File_Number:p.file_number,Year:p.year,Status:p.status,prjType:p.type,Link:p.link,_wui:p.in_wui===true,_burnM:p.burn_dist_mi==null?Infinity:p.burn_dist_mi*MILE,_burnName:p.nearest_burn||''}};});
+    document.getElementById('wuiNote').textContent='WUI and burn-scar results were computed once from the county WUI layer and NIFC perimeters (snapshot Nov 6, 2026) and cached here, so this page puts no load on county servers.';
+    document.getElementById('dlCsv').disabled=false;document.getElementById('dlGeo').disabled=false;
     render();
-    var t=performance.now();
-    return wuiTest(pts).then(function(W){
-      PROJ.forEach(function(f){var x=f.geometry.coordinates[0],y=f.geometry.coordinates[1];f.properties._wui=W.some(function(w){var b=w.bbox;return x>=b[0]&&x<=b[2]&&y>=b[1]&&y<=b[3]&&inGeom(w.geometry,x,y);});});
-      document.getElementById('wuiNote').textContent='Each project point tested against the county WUI layer ('+((performance.now()-t)/1000).toFixed(1)+' s, '+W.length+' WUI polygons touched). Distance to the nearest NIFC fire perimeter computed in your browser.';
-      document.getElementById('dlCsv').disabled=false;document.getElementById('dlGeo').disabled=false;
-      render();
-    });
-  }).catch(function(e){document.getElementById('wuiNote').textContent='County services could not be reached right now: '+(e.message||e);});
+  }).catch(function(e){document.getElementById('wuiNote').textContent='Project snapshot could not be loaded: '+(e.message||e);});
 
   /* ---------- filters ---------- */
   var YEAR='all',years=[];
@@ -358,7 +326,6 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
 
   function tog(id,lyr){document.getElementById(id).onchange=function(e){var l=typeof lyr==='function'?lyr():lyr;if(!l)return;e.target.checked?map.addLayer(l):map.removeLayer(l);};}
   tog('lyProj',markers);tog('lyBurn',burnLayer);tog('lyFire',fireLayer);
-  document.getElementById('lyWui').onchange=function(e){map.getPane('wui').style.display=e.target.checked?'':'none';};
   var lg=document.querySelector('.legend'),lgT=document.getElementById('lgT');
   lgT.onclick=function(){var c=lg.classList.toggle('collapsed');lgT.textContent=c?'show':'hide';lgT.setAttribute('aria-expanded',String(!c));};
   if(window.matchMedia('(max-width:900px)').matches)lgT.click();
