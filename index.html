@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Front Range Watch</title>
+<meta name="description" content="Where new development in El Paso County, Colorado meets wildfire risk: imagery swipe since 2014, burn scars, county planning projects, the wildland-urban interface and live satellite fire detections.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{
+  --navy:#0F1B2D;--navy2:#162538;--graphite:#1E2430;--line:#2b3a50;--ivory:#F3EEE3;--muted:#9aa8ba;
+  --cyan:#3FC1C9;--gold:#D4A43A;--orange:#F08C28;--red:#E5484D;--fire:#ffcf4a;
+  --f-d:"Barlow Condensed","Arial Narrow",Arial,sans-serif;--f-b:"Source Sans 3","Segoe UI",system-ui,sans-serif;--f-m:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--navy);color:var(--ivory);font:14px/1.45 var(--f-b)}
+a{color:var(--cyan)}
+.app{display:grid;grid-template-columns:minmax(0,1fr) 420px;grid-template-rows:auto minmax(0,1fr);height:100%}
+header{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--navy)}
+header .eyebrow{font:600 11px var(--f-m);letter-spacing:.1em;text-transform:uppercase;color:var(--gold)}
+header h1{margin:0;font:700 30px/1 var(--f-d);letter-spacing:.02em}
+header .sub{color:var(--muted);font-size:13px;flex:1 1 320px}
+.mapwrap{position:relative;min-height:0}
+#map{position:absolute;inset:0;background:#0b1320}
+.leaflet-container{font-family:var(--f-b)}
+.swipe{position:absolute;top:0;bottom:0;width:0;z-index:650;pointer-events:none}
+.swipe .bar{position:absolute;top:0;bottom:0;left:-1.5px;width:3px;background:#fff;box-shadow:0 0 6px rgba(0,0,0,.6)}
+.swipe .knob{position:absolute;top:50%;left:-21px;width:42px;height:42px;margin-top:-21px;border-radius:50%;background:#fff;color:var(--navy);display:grid;place-items:center;font:700 16px var(--f-m);pointer-events:auto;cursor:ew-resize;box-shadow:0 2px 8px rgba(0,0,0,.5);touch-action:none;border:0}
+.yr{position:absolute;top:12px;z-index:700;display:flex;align-items:center;gap:6px;background:rgba(15,27,45,.92);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+.yr.l{left:12px}.yr.r{right:56px}
+.yr label{font:600 10px var(--f-m);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.yr select{background:var(--navy2);color:var(--ivory);border:1px solid var(--line);border-radius:4px;font:600 13px var(--f-m);padding:3px 4px}
+.legend{position:absolute;left:12px;bottom:26px;z-index:700;background:rgba(15,27,45,.93);border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12.5px;max-width:250px}
+.legend h3{margin:0 0 6px;font:700 13px var(--f-d);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.legend ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
+.legend li{display:flex;gap:8px;align-items:center}
+.sw{width:14px;height:14px;border-radius:50%;flex:0 0 14px;border:2px solid #0b1320}
+.sq{width:16px;height:12px;flex:0 0 16px;border-radius:2px}
+.credit{position:absolute;right:8px;bottom:4px;z-index:700;font:10px var(--f-m);color:#dfe6ee;text-shadow:0 0 3px #000}
+aside{overflow-y:auto;background:var(--graphite);border-left:1px solid var(--line)}
+aside section{padding:14px 18px;border-bottom:1px solid var(--line)}
+h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:uppercase;color:var(--ivory)}
+.note{color:var(--muted);font-size:12.5px;margin:6px 0 0}
+.kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.kpi{background:var(--navy2);border:1px solid var(--line);border-radius:6px;padding:9px 10px}
+.kpi b{display:block;font:600 10px var(--f-m);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.kpi span{font:600 26px/1.1 var(--f-m);font-variant-numeric:tabular-nums}
+.kpi small{display:block;color:var(--muted);font-size:11.5px}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px}
+.ctl button{font:600 12px var(--f-d);letter-spacing:.06em;text-transform:uppercase;background:var(--navy2);color:var(--ivory);border:1px solid var(--line);border-radius:4px;padding:6px 10px;cursor:pointer}
+.ctl button[aria-pressed="true"]{background:var(--cyan);color:var(--navy);border-color:var(--cyan)}
+.ctl label{font-size:13px;display:flex;gap:5px;align-items:center;cursor:pointer}
+#chart{width:100%;height:auto;display:block}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.list li button{all:unset;display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:8px;align-items:start;width:100%;cursor:pointer;padding:6px 6px;border-radius:4px}
+.list li button:hover,.list li button:focus-visible{background:var(--navy2);outline:1px solid var(--line)}
+.list .t{font-weight:600;font-size:13px}
+.list .d{color:var(--muted);font-size:12px}
+.list .n{font:600 11px var(--f-m);color:var(--muted);white-space:nowrap;text-align:right}
+.dl{display:flex;gap:8px;flex-wrap:wrap}
+.dl button{font:600 12px var(--f-d);letter-spacing:.06em;text-transform:uppercase;background:var(--gold);color:var(--navy);border:0;border-radius:4px;padding:8px 12px;cursor:pointer}
+.dl button:disabled{opacity:.4;cursor:default}
+.apilog{font:11px/1.5 var(--f-m);color:var(--muted);max-height:150px;overflow:auto;word-break:break-all;margin-top:8px}
+.apilog b{color:var(--cyan)}.apilog b.err{color:var(--red)}
+.src ol{margin:0;padding-left:18px;color:var(--muted);font-size:12.5px;display:grid;gap:3px}
+.disc{font:10.5px/1.5 var(--f-m);color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin:0}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--navy);color:var(--ivory);border:1px solid var(--line)}
+.leaflet-popup-content{margin:10px 14px;font-size:13px;line-height:1.4;max-width:280px}
+.leaflet-popup-content b.h{display:block;font:700 15px var(--f-d);letter-spacing:.02em;margin-bottom:2px}
+.leaflet-container a.leaflet-popup-close-button{color:var(--muted)}
+.tag{display:inline-block;font:600 10px var(--f-m);letter-spacing:.05em;text-transform:uppercase;padding:1px 6px;border-radius:3px;margin:3px 4px 0 0}
+.fire-ic{width:14px;height:14px;border-radius:50%;background:var(--fire);box-shadow:0 0 0 4px rgba(255,120,40,.45),0 0 12px 6px rgba(255,90,30,.55)}
+.busy{color:var(--gold)}
+@media (max-width:900px){
+  .app{grid-template-columns:1fr;grid-template-rows:auto 70vh auto;height:auto}
+  aside{border-left:0;border-top:1px solid var(--line)}
+  .yr.r{right:12px;top:56px}
+  .legend{font-size:11.5px;max-width:190px;padding:7px 9px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div>
+      <div class="eyebrow">El Paso County, Colorado · wildfire &amp; growth · live public data</div>
+      <h1>Front Range Watch</h1>
+    </div>
+    <div class="sub">Where is new development meeting wildfire risk? Swipe the imagery to see change since 2014, then see which county planning projects sit in the wildland-urban interface or near past burn scars.</div>
+  </header>
+
+  <div class="mapwrap">
+    <div id="map" role="application" aria-label="Map of El Paso County with imagery swipe, burn scars and planning projects"></div>
+    <div class="yr l"><label for="selL">Left</label><select id="selL"></select></div>
+    <div class="yr r"><label for="selR">Right</label><select id="selR"></select></div>
+    <div class="swipe" id="swipe"><div class="bar"></div><button class="knob" id="knob" aria-label="Drag to compare imagery dates. Use arrow keys to move.">⇆</button></div>
+    <div class="legend">
+      <h3>Legend</h3>
+      <ul>
+        <li><span class="sw" style="background:var(--red)"></span>Project in WUI and within 1 mi of a burn scar</li>
+        <li><span class="sw" style="background:var(--orange)"></span>Project in WUI</li>
+        <li><span class="sw" style="background:var(--gold)"></span>Project within 1 mi of a burn scar</li>
+        <li><span class="sw" style="background:var(--cyan)"></span>Other planning project</li>
+        <li><span class="sq" style="border:2px dashed #ff6a3d;background:rgba(255,106,61,.18)"></span>Past fire perimeter (NIFC)</li>
+        <li><span class="sq" style="background:rgba(240,140,40,.45)"></span>Wildland-urban interface (county)</li>
+        <li><span class="fire-ic" style="width:10px;height:10px;flex:0 0 10px;margin:0 3px"></span>Satellite fire detection, last 48 h</li>
+      </ul>
+    </div>
+    <div class="credit">Imagery: Esri World Imagery Wayback · Maxar, Earthstar Geographics</div>
+  </div>
+
+  <aside>
+    <section>
+      <h2>Growth meets fire risk</h2>
+      <div class="kpis">
+        <div class="kpi"><b>Planning projects</b><span id="kAll">–</span><small id="kAllS">loading county data</small></div>
+        <div class="kpi"><b>In the WUI</b><span id="kWui" style="color:var(--orange)">–</span><small id="kWuiS"></small></div>
+        <div class="kpi"><b>Within 1 mi of burn scar</b><span id="kBurn" style="color:var(--gold)">–</span><small id="kBurnS"></small></div>
+        <div class="kpi"><b>Both</b><span id="kBoth" style="color:var(--red)">–</span><small id="kBothS"></small></div>
+      </div>
+      <p class="note" id="wuiNote">Checking every project against the county WUI layer…</p>
+    </section>
+
+    <section>
+      <h2>Filter</h2>
+      <div class="ctl" id="years" role="group" aria-label="Project year"></div>
+      <div class="ctl"><button id="play" aria-pressed="false">▶ Play years</button>
+        <label><input type="checkbox" id="stAct" checked> Active</label>
+        <label><input type="checkbox" id="stApp" checked> Approved</label>
+        <label><input type="checkbox" id="stOth" checked> Other</label>
+      </div>
+      <svg id="chart" viewBox="0 0 380 150" role="img" aria-label="Projects per year by wildfire exposure"></svg>
+    </section>
+
+    <section>
+      <h2>Most exposed projects</h2>
+      <ul class="list" id="top"><li class="note">Loading…</li></ul>
+    </section>
+
+    <section>
+      <h2>Live fire detections</h2>
+      <div id="fires" class="note" style="margin:0">Loading NASA VIIRS…</div>
+    </section>
+
+    <section>
+      <h2>Get the data</h2>
+      <p class="note" style="margin-top:0">Every project with its WUI result, nearest burn scar and distance.</p>
+      <div class="dl" style="margin-top:8px"><button id="dlCsv" disabled>Projects · CSV</button><button id="dlGeo" disabled>Projects · GeoJSON</button></div>
+      <div class="apilog" id="apilog"></div>
+    </section>
+
+    <section class="src">
+      <h2>Data sources</h2>
+      <ol>
+        <li><a href="https://livingatlas.arcgis.com/wayback/" target="_blank" rel="noopener">Esri World Imagery Wayback</a>, every release since Feb 2014</li>
+        <li><a href="https://data-nifc.opendata.arcgis.com/" target="_blank" rel="noopener">NIFC Interagency Fire Perimeter History</a></li>
+        <li><a href="https://gisservices.elpasoco.com/arcgis2/rest/services/Public" target="_blank" rel="noopener">El Paso County public GIS services</a>: PlanningProjects, TetraTech WUI, county boundary</li>
+        <li><a href="https://www.arcgis.com/home/item.html?id=dece90af1a0242dcbf0ca36d30276aa3" target="_blank" rel="noopener">NASA VIIRS thermal hotspots</a> via Esri Living Atlas, live</li>
+      </ol>
+    </section>
+    <section>
+      <p class="disc">Independent analysis by Carlos Barrera using public data only; not an official county product. "In the WUI" means the project point falls inside a polygon of the county's public wildland-urban interface layer. Burn-scar distance is measured from the project point to the nearest NIFC perimeter. Planning projects are 2023–2026 applications in the county's public layer.</p>
+    </section>
+  </aside>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+(function(){
+  var EPC='https://gisservices.elpasoco.com/arcgis2/rest/services/Public/';
+  var NIFC='https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/InterAgencyFirePerimeterHistory_All_Years_View/FeatureServer/0/query';
+  var VIIRS='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/Satellite_VIIRS_Thermal_Hotspots_and_Fire_Activity/FeatureServer/0/query';
+  var WAYBACK='https://s3-us-west-2.amazonaws.com/config.maptiles.arcgis.com/waybackconfig.json';
+  var CBOX=[-105.10,38.51,-103.90,39.13]; // county envelope
+  var MILE=1609.344, NEAR=1*MILE;
+  var COL={both:'#E5484D',wui:'#F08C28',burn:'#D4A43A',none:'#3FC1C9'};
+  var fmt=function(n){return Number(n).toLocaleString('en-US');};
+
+  var logEl=document.getElementById('apilog');
+  function log(name,url,status,ms,extra){logEl.insertAdjacentHTML('afterbegin','<div><b class="'+(status>=200&&status<300?'':'err')+'">'+(status||'ERR')+'</b> '+name+' · '+ms+' ms'+(extra?' · '+extra:'')+'<br>'+url.replace(/&/g,'&amp;').slice(0,260)+'</div>');}
+  function get(name,url,opt){var t=performance.now();return fetch(url,opt).then(function(r){return r.json().then(function(j){var ms=Math.round(performance.now()-t);if(j.error)throw new Error(j.error.message);log(name,url+(opt&&opt.body?' (POST)':''),r.status,ms,j.features?j.features.length+' features':(j.count!=null?j.count+' count':''));return j;});}).catch(function(e){log(name,url,0,Math.round(performance.now()-t),String(e.message||e));throw e;});}
+  function q(base,params){return base+'?'+new URLSearchParams(params).toString();}
+
+  /* ---------- geometry helpers (no external libraries) ---------- */
+  function ringContains(r,x,y){var c=false;for(var i=0,j=r.length-1;i<r.length;j=i++){var xi=r[i][0],yi=r[i][1],xj=r[j][0],yj=r[j][1];if(((yi>y)!=(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))c=!c;}return c;}
+  function polys(g){return g.type==='Polygon'?[g.coordinates]:g.type==='MultiPolygon'?g.coordinates:[];}
+  function inGeom(g,x,y){return polys(g).some(function(p){if(!ringContains(p[0],x,y))return false;for(var k=1;k<p.length;k++)if(ringContains(p[k],x,y))return false;return true;});}
+  function bboxOf(g){var b=[180,90,-180,-90];polys(g).forEach(function(p){p[0].forEach(function(c){if(c[0]<b[0])b[0]=c[0];if(c[1]<b[1])b[1]=c[1];if(c[0]>b[2])b[2]=c[0];if(c[1]>b[3])b[3]=c[1];});});return b;}
+  // distance in meters from point to polygon boundary (0 if inside), local equirectangular
+  function distToGeom(g,x,y){if(inGeom(g,x,y))return 0;var kx=111320*Math.cos(y*Math.PI/180),ky=110574,best=Infinity;
+    polys(g).forEach(function(p){p.forEach(function(r){for(var i=1;i<r.length;i++){var ax=(r[i-1][0]-x)*kx,ay=(r[i-1][1]-y)*ky,bx=(r[i][0]-x)*kx,by=(r[i][1]-y)*ky,dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy,t=L?Math.max(0,Math.min(1,-(ax*dx+ay*dy)/L)):0,px=ax+t*dx,py=ay+t*dy,d=px*px+py*py;if(d<best)best=d;}});});return Math.sqrt(best);}
+
+  /* ---------- map + swipe ---------- */
+  var map=L.map('map',{zoomControl:false,minZoom:9,maxZoom:18,attributionControl:false}).setView([39.02,-104.66],12);
+  L.control.zoom({position:'topright'}).addTo(map);
+  L.control.scale({position:'bottomright',imperial:true,metric:false}).addTo(map);
+  map.createPane('leftImg').style.zIndex=210;
+  map.createPane('rightImg').style.zIndex=200;
+  map.createPane('wui').style.zIndex=380;
+  var leftLayer=null,rightLayer=null,ratio=.5;
+  var swipe=document.getElementById('swipe'),knob=document.getElementById('knob');
+  function clip(){var s=map.getSize(),nw=map.containerPointToLayerPoint([0,0]),se=map.containerPointToLayerPoint(s),cx=nw.x+s.x*ratio;
+    map.getPane('leftImg').style.clip='rect('+nw.y+'px,'+cx+'px,'+se.y+'px,'+nw.x+'px)';swipe.style.left=(s.x*ratio)+'px';}
+  map.on('move zoom resize viewreset',clip);
+  function drag(ev){var r=map.getContainer().getBoundingClientRect();ratio=Math.max(.02,Math.min(.98,(ev.clientX-r.left)/r.width));clip();}
+  knob.addEventListener('pointerdown',function(e){e.preventDefault();knob.setPointerCapture(e.pointerId);map.dragging.disable();knob.onpointermove=drag;});
+  knob.addEventListener('pointerup',function(){knob.onpointermove=null;map.dragging.enable();});
+  knob.addEventListener('keydown',function(e){if(e.key==='ArrowLeft'){ratio=Math.max(.02,ratio-.05);clip();e.preventDefault();}if(e.key==='ArrowRight'){ratio=Math.min(.98,ratio+.05);clip();e.preventDefault();}});
+  L.DomEvent.disableClickPropagation(knob);
+
+  var REL=[];
+  function tileUrl(r){return r.itemURL.replace('{level}','{z}').replace('{row}','{y}').replace('{col}','{x}');}
+  function setSide(side){var sel=document.getElementById(side==='l'?'selL':'selR'),r=REL[sel.value];var lyr=L.tileLayer(tileUrl(r),{pane:side==='l'?'leftImg':'rightImg',maxNativeZoom:19,maxZoom:18});
+    if(side==='l'){if(leftLayer)map.removeLayer(leftLayer);leftLayer=lyr.addTo(map);}else{if(rightLayer)map.removeLayer(rightLayer);rightLayer=lyr.addTo(map);}clip();}
+  get('Esri Wayback imagery releases',WAYBACK).then(function(c){
+    REL=Object.keys(c).map(function(k){var v=c[k];return {id:k,date:(v.itemTitle.match(/\d{4}-\d{2}-\d{2}/)||[''])[0],itemURL:v.itemURL};}).filter(function(r){return r.date;}).sort(function(a,b){return a.date<b.date?-1:1;});
+    ['selL','selR'].forEach(function(id){var sel=document.getElementById(id),html='',yr='';REL.forEach(function(r,i){var y=r.date.slice(0,4);if(y!==yr){if(yr)html+='</optgroup>';html+='<optgroup label="'+y+'">';yr=y;}html+='<option value="'+i+'">'+r.date+'</option>';});sel.innerHTML=html+'</optgroup>';});
+    document.getElementById('selL').value=0;document.getElementById('selR').value=REL.length-1;
+    setSide('l');setSide('r');
+    document.getElementById('selL').onchange=function(){setSide('l');};document.getElementById('selR').onchange=function(){setSide('r');};
+  }).catch(function(){L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{pane:'rightImg'}).addTo(map);});
+
+  /* ---------- WUI overlay (county MapServer export, redrawn on pan/zoom) ---------- */
+  var wuiImg=null;
+  function wuiRefresh(){var b=map.getBounds(),s=map.getSize(),sw=L.CRS.EPSG3857.project(b.getSouthWest()),ne=L.CRS.EPSG3857.project(b.getNorthEast());
+    var dyn=[{id:0,source:{type:'mapLayer',mapLayerId:0},drawingInfo:{renderer:{type:'simple',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[240,140,40,115],outline:{type:'esriSLS',style:'esriSLSNull',color:[0,0,0,0],width:0}}}}}];
+    var url=q(EPC+'TetraTechWUI/MapServer/export',{bbox:[sw.x,sw.y,ne.x,ne.y].join(','),bboxSR:3857,imageSR:3857,size:s.x+','+s.y,format:'png32',transparent:'true',dynamicLayers:JSON.stringify(dyn),f:'image'});
+    var next=L.imageOverlay(url,b,{pane:'wui',opacity:1,interactive:false});
+    next.once('load',function(){if(wuiImg&&wuiImg!==next)map.removeLayer(wuiImg);wuiImg=next;});next.addTo(map);}
+  map.on('moveend',wuiRefresh);wuiRefresh();
+
+  /* ---------- county boundary ---------- */
+  get('County boundary',q(EPC+'TetraTechPPROEMHazards/FeatureServer/9/query',{where:'1=1',outSR:4326,maxAllowableOffset:.0005,f:'geojson'})).then(function(j){
+    L.geoJSON(j,{interactive:false,style:{color:'#F3EEE3',weight:2,dashArray:'2 6',fill:false,opacity:.8}}).addTo(map);}).catch(function(){});
+
+  /* ---------- burn scars ---------- */
+  var FIRES=[];
+  var firesP=get('NIFC fire perimeters',q(NIFC,{where:'1=1',geometry:CBOX.join(','),geometryType:'esriGeometryEnvelope',inSR:4326,spatialRel:'esriSpatialRelIntersects',outFields:'INCIDENT,FIRE_YEAR,GIS_ACRES',outSR:4326,maxAllowableOffset:.0002,f:'geojson'})).then(function(j){
+    var seen={};
+    j.features.forEach(function(f){var p=f.properties,k=(p.INCIDENT||'')+'|'+p.FIRE_YEAR;if(!f.geometry)return;if(!seen[k]||(p.GIS_ACRES||0)>(seen[k].properties.GIS_ACRES||0))seen[k]=f;});
+    FIRES=Object.keys(seen).map(function(k){return seen[k];}).filter(function(f){return /^\d{4}$/.test(String(f.properties.FIRE_YEAR))&&(f.properties.INCIDENT||'')!==String(f.properties.FIRE_YEAR);});
+    FIRES.forEach(function(f){f.bbox=bboxOf(f.geometry);var p=f.properties;
+      L.geoJSON(f,{style:{color:'#ff6a3d',weight:2,dashArray:'7 5',fillColor:'#ff6a3d',fillOpacity:.16}}).bindPopup('<b class="h">'+p.INCIDENT+' Fire · '+p.FIRE_YEAR+'</b>'+fmt(Math.round(p.GIS_ACRES||0))+' acres<br><span style="color:var(--muted)">NIFC perimeter</span>').addTo(map);
+      var c=L.latLngBounds([[f.bbox[1],f.bbox[0]],[f.bbox[3],f.bbox[2]]]).getCenter();
+      L.marker(c,{interactive:false,icon:L.divIcon({className:'',html:'<div style="font:700 13px Barlow Condensed,Arial Narrow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#ffd9c9;text-shadow:0 0 3px #000,0 0 3px #000;white-space:nowrap;transform:translate(-50%,-50%)">'+p.INCIDENT+' '+p.FIRE_YEAR+'</div>',iconSize:[0,0]})}).addTo(map);
+    });
+    return FIRES;
+  }).catch(function(){return [];});
+
+  /* ---------- planning projects + WUI test ---------- */
+  var PROJ=[],markers=L.layerGroup().addTo(map);
+  var projP=get('County planning projects',q(EPC+'PlanningProjects/MapServer/0/query',{where:'1=1',outFields:'*',outSR:4326,f:'geojson'})).then(function(j){PROJ=j.features.filter(function(f){return f.geometry&&f.geometry.coordinates;});return PROJ;});
+
+  function wuiTest(pts){
+    var chunks=[],n=4,size=Math.ceil(pts.length/n);for(var i=0;i<pts.length;i+=size)chunks.push(pts.slice(i,i+size));
+    return Promise.all(chunks.map(function(c,i){var body=new URLSearchParams({geometry:JSON.stringify({points:c,spatialReference:{wkid:4326}}),geometryType:'esriGeometryMultipoint',inSR:'4326',spatialRel:'esriSpatialRelIntersects',outFields:'gridcode',returnGeometry:'true',outSR:'4326',maxAllowableOffset:'0.0002',geometryPrecision:'5',f:'geojson'});
+      return get('WUI test · batch '+(i+1)+' of '+chunks.length,EPC+'TetraTechPPROEMHazards/FeatureServer/1/query',{method:'POST',body:body});}))
+      .then(function(rs){var all=[];rs.forEach(function(r){all=all.concat(r.features||[]);});all.forEach(function(f){f.bbox=bboxOf(f.geometry);});return all;});
+  }
+
+  Promise.all([projP,firesP]).then(function(r){
+    var pts=PROJ.map(function(f){return f.geometry.coordinates;});
+    PROJ.forEach(function(f){var x=f.geometry.coordinates[0],y=f.geometry.coordinates[1],best=Infinity,name='';
+      FIRES.forEach(function(fi){var b=fi.bbox,bx=Math.max(0,b[0]-x,x-b[2])*85000,by=Math.max(0,b[1]-y,y-b[3])*111000;if(Math.sqrt(bx*bx+by*by)>best)return;var d=distToGeom(fi.geometry,x,y);if(d<best){best=d;name=fi.properties.INCIDENT+' '+fi.properties.FIRE_YEAR;}});
+      f.properties._burnM=best;f.properties._burnName=name;f.properties._wui=null;});
+    render();
+    var t=performance.now();
+    return wuiTest(pts).then(function(W){
+      PROJ.forEach(function(f){var x=f.geometry.coordinates[0],y=f.geometry.coordinates[1];f.properties._wui=W.some(function(w){var b=w.bbox;return x>=b[0]&&x<=b[2]&&y>=b[1]&&y<=b[3]&&inGeom(w.geometry,x,y);});});
+      document.getElementById('wuiNote').textContent='Each project point tested against the county WUI layer ('+((performance.now()-t)/1000).toFixed(1)+' s, '+W.length+' WUI polygons touched). Distance to the nearest NIFC fire perimeter computed in your browser.';
+      document.getElementById('dlCsv').disabled=false;document.getElementById('dlGeo').disabled=false;
+      render();
+    });
+  }).catch(function(e){document.getElementById('wuiNote').textContent='County services could not be reached right now: '+(e.message||e);});
+
+  /* ---------- filters ---------- */
+  var YEAR='all',years=[];
+  function cls(p){var w=p._wui===true,b=p._burnM<=NEAR;return w&&b?'both':w?'wui':b?'burn':'none';}
+  function statusOk(s){var a=document.getElementById('stAct').checked,ap=document.getElementById('stApp').checked,o=document.getElementById('stOth').checked;return s==='Active'?a:s==='Approved'?ap:o;}
+  function visible(f){var p=f.properties;return statusOk(p.Status)&&(YEAR==='all'||(YEAR.cum?p.Year<=YEAR.y:p.Year===YEAR));}
+  ['stAct','stApp','stOth'].forEach(function(id){document.getElementById(id).onchange=render;});
+
+  function buildYears(){var s={};PROJ.forEach(function(f){if(f.properties.Year)s[f.properties.Year]=(s[f.properties.Year]||0)+1;});years=Object.keys(s).map(Number).sort();
+    var box=document.getElementById('years');box.innerHTML='<button data-y="all" aria-pressed="true">All years</button>'+years.map(function(y){return '<button data-y="'+y+'" aria-pressed="false">'+y+'</button>';}).join('');
+    box.querySelectorAll('button').forEach(function(b){b.onclick=function(){stopPlay();YEAR=b.dataset.y==='all'?'all':+b.dataset.y;mark();render();};});}
+  function mark(){document.querySelectorAll('#years button').forEach(function(b){var y=b.dataset.y;b.setAttribute('aria-pressed',String(YEAR==='all'?y==='all':(YEAR.cum?+y===YEAR.y:+y===YEAR)));});}
+  var timer=null,playBtn=document.getElementById('play');
+  function stopPlay(){if(timer){clearInterval(timer);timer=null;}playBtn.setAttribute('aria-pressed','false');playBtn.textContent='▶ Play years';}
+  playBtn.onclick=function(){if(timer){stopPlay();return;}var i=0;playBtn.setAttribute('aria-pressed','true');playBtn.textContent='■ Stop';
+    var step=function(){YEAR={cum:true,y:years[i]};mark();render();i++;if(i>=years.length){clearInterval(timer);timer=null;setTimeout(function(){playBtn.setAttribute('aria-pressed','false');playBtn.textContent='▶ Play years';},400);}};step();timer=setInterval(step,1300);};
+
+  /* ---------- render ---------- */
+  var built=false;
+  function popup(p){var c=cls(p),tags='';
+    if(p._wui===true)tags+='<span class="tag" style="background:#F08C28;color:#0F1B2D">In WUI</span>';else if(p._wui===false)tags+='<span class="tag" style="background:#2b3a50">Outside WUI</span>';
+    if(p._burnM<=NEAR)tags+='<span class="tag" style="background:#D4A43A;color:#0F1B2D">'+(p._burnM===0?'Inside':(p._burnM/MILE).toFixed(2)+' mi from')+' '+p._burnName+' burn</span>';
+    return '<b class="h">'+(p.Project_Name||'Planning project')+'</b><span style="font-family:var(--f-m);font-size:11px;color:var(--muted)">'+(p.File_Number||'')+' · '+(p.Year||'')+' · '+(p.Status||'')+'</span><br>'+(p.Description?'<span>'+String(p.Description).slice(0,220)+(String(p.Description).length>220?'…':'')+'</span><br>':'')+tags+
+      '<br><span style="color:var(--muted);font-size:12px">Nearest burn scar: '+(p._burnName?p._burnName+', '+(p._burnM===0?'inside':(p._burnM/MILE).toFixed(1)+' mi'):'none found')+'</span>'+(p.Link?'<br><a href="'+p.Link+'" target="_blank" rel="noopener">County project page ↗</a>':'');}
+  function render(){
+    if(!PROJ.length)return;
+    if(!built){buildYears();built=true;}
+    markers.clearLayers();
+    var vis=PROJ.filter(visible),c={both:0,wui:0,burn:0,none:0};
+    vis.forEach(function(f){var p=f.properties,k=cls(p);c[k]++;
+      var m=L.circleMarker([f.geometry.coordinates[1],f.geometry.coordinates[0]],{radius:k==='none'?5:7,color:'#0b1320',weight:1.5,fillColor:COL[k],fillOpacity:.95}).bindPopup(function(){return popup(p);});m.addTo(markers);f._m=m;});
+    var n=vis.length,pct=function(v){return n?Math.round(v/n*100)+'% of shown':'';},wuiReady=PROJ.some(function(f){return f.properties._wui!==null;});
+    document.getElementById('kAll').textContent=fmt(n);document.getElementById('kAllS').textContent=YEAR==='all'?'all years, filtered by status':(YEAR.cum?'through '+YEAR.y:'in '+YEAR);
+    document.getElementById('kWui').textContent=wuiReady?fmt(c.wui+c.both):'…';document.getElementById('kWuiS').textContent=wuiReady?pct(c.wui+c.both):'checking';
+    document.getElementById('kBurn').textContent=fmt(c.burn+c.both);document.getElementById('kBurnS').textContent=pct(c.burn+c.both);
+    document.getElementById('kBoth').textContent=wuiReady?fmt(c.both):'…';document.getElementById('kBothS').textContent=wuiReady?pct(c.both):'checking';
+    chart();topList(vis);
+  }
+  function chart(){var svg=document.getElementById('chart'),W=380,H=150,L=30,B=22,T=10,R=6;
+    var rows=years.map(function(y){var c={both:0,wui:0,burn:0,none:0};PROJ.forEach(function(f){if(f.properties.Year===y&&statusOk(f.properties.Status))c[cls(f.properties)]++;});return {y:y,c:c,t:c.both+c.wui+c.burn+c.none};});
+    var mx=Math.max.apply(null,rows.map(function(r){return r.t;}).concat([1])),bw=(W-L-R)/rows.length,s='';
+    var yy=function(v){return T+(1-v/mx)*(H-T-B);};
+    [0,Math.round(mx/2),mx].forEach(function(v){s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+yy(v)+'" y2="'+yy(v)+'" stroke="#2b3a50"/><text x="'+(L-5)+'" y="'+(yy(v)+3)+'" text-anchor="end" font-size="9" font-family="JetBrains Mono,monospace" fill="#9aa8ba">'+v+'</text>';});
+    rows.forEach(function(r,i){var x=L+i*bw+bw*.18,w=bw*.64,acc=0,sel=YEAR!=='all'&&(YEAR.cum?r.y<=YEAR.y:r.y===YEAR);
+      ['both','wui','burn','none'].forEach(function(k){var v=r.c[k];if(!v)return;var y0=yy(acc+v),h=yy(acc)-y0;s+='<rect x="'+x+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="'+COL[k]+'" opacity="'+(YEAR==='all'||sel?1:.35)+'"><title>'+r.y+' · '+k+': '+v+'</title></rect>';acc+=v;});
+      s+='<text x="'+(x+w/2)+'" y="'+(H-B+14)+'" text-anchor="middle" font-size="10" font-family="JetBrains Mono,monospace" fill="#F3EEE3">'+r.y+'</text><text x="'+(x+w/2)+'" y="'+(yy(r.t)-4)+'" text-anchor="middle" font-size="9" font-family="JetBrains Mono,monospace" fill="#9aa8ba">'+r.t+'</text>';});
+    svg.innerHTML=s;}
+  function topList(vis){var rank={both:0,wui:1,burn:2,none:3};
+    var arr=vis.filter(function(f){return cls(f.properties)!=='none';}).sort(function(a,b){var ra=rank[cls(a.properties)],rb=rank[cls(b.properties)];return ra-rb||a.properties._burnM-b.properties._burnM;}).slice(0,8);
+    var ul=document.getElementById('top');
+    if(!arr.length){ul.innerHTML='<li class="note">No exposed projects for this filter.</li>';return;}
+    ul.innerHTML=arr.map(function(f,i){var p=f.properties,k=cls(p);return '<li><button data-i="'+PROJ.indexOf(f)+'"><span class="sw" style="background:'+COL[k]+';width:12px;height:12px;margin-top:3px"></span><span><span class="t">'+(p.Project_Name||'Project')+'</span><br><span class="d">'+(p.Year||'')+' · '+(p.Status||'')+(p._wui?' · in WUI':'')+'</span></span><span class="n">'+(p._burnM===0?'inside<br>':(p._burnM/MILE).toFixed(1)+' mi<br>')+(p._burnName||'')+'</span></button></li>';}).join('');
+    ul.querySelectorAll('button').forEach(function(b){b.onclick=function(){var f=PROJ[+b.dataset.i];map.flyTo([f.geometry.coordinates[1],f.geometry.coordinates[0]],16,{duration:1.2});map.once('moveend',function(){f._m&&f._m.openPopup();});ratio=.5;clip();};});}
+
+  /* ---------- live fires ---------- */
+  var fireLayer=L.layerGroup().addTo(map);
+  get('NASA VIIRS hotspots · last 48 h',q(VIIRS,{where:'hours_old<=48',geometry:'-109.1,36.9,-102,41.1',geometryType:'esriGeometryEnvelope',inSR:4326,spatialRel:'esriSpatialRelIntersects',outFields:'acq_date,acq_time,frp,confidence,hours_old,satellite,daynight',outSR:4326,f:'geojson'})).then(function(j){
+    var inC=0,f=j.features||[];
+    f.forEach(function(x){var c=x.geometry.coordinates,p=x.properties;if(c[0]>=CBOX[0]&&c[0]<=CBOX[2]&&c[1]>=CBOX[1]&&c[1]<=CBOX[3])inC++;
+      L.marker([c[1],c[0]],{icon:L.divIcon({className:'',html:'<div class="fire-ic"></div>',iconSize:[14,14],iconAnchor:[7,7]})}).bindPopup('<b class="h">Satellite fire detection</b>'+Math.round(p.hours_old)+' h ago · '+(p.satellite||'VIIRS')+' · '+(p.daynight==='D'?'day':'night')+'<br>Fire radiative power: '+p.frp+' MW · confidence: '+p.confidence+'<br><span style="color:var(--muted);font-size:12px">A hotspot can be a wildfire, prescribed burn, flare or other heat source.</span>').addTo(fireLayer);});
+    document.getElementById('fires').innerHTML='<b style="color:var(--ivory);font:600 22px var(--f-m)">'+inC+'</b> in El Paso County · '+f.length+' across Colorado in the last 48 hours (NASA VIIRS, refreshed when you open the page). Hotspots include prescribed burns and industrial heat, not only wildfires.';
+  }).catch(function(){document.getElementById('fires').textContent='Fire detection service unavailable right now.';});
+
+  /* ---------- downloads ---------- */
+  function save(name,type,text){var b=new Blob([text],{type:type}),u=URL.createObjectURL(b),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u);},2000);}
+  function rowOf(f){var p=f.properties;return {file_number:p.File_Number,project_name:p.Project_Name,year:p.Year,status:p.Status,type:p.prjType,in_wui:p._wui,nearest_burn:p._burnName,burn_dist_mi:p._burnM===Infinity?null:+(p._burnM/MILE).toFixed(3),exposure:cls(p),link:p.Link,lon:+f.geometry.coordinates[0].toFixed(6),lat:+f.geometry.coordinates[1].toFixed(6)};}
+  document.getElementById('dlCsv').onclick=function(){var rows=PROJ.map(rowOf),keys=Object.keys(rows[0]);save('front_range_watch_projects.csv','text/csv',[keys.join(',')].concat(rows.map(function(r){return keys.map(function(k){var v=r[k];v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',');})).join('\n'));};
+  document.getElementById('dlGeo').onclick=function(){save('front_range_watch_projects.geojson','application/geo+json',JSON.stringify({type:'FeatureCollection',features:PROJ.map(function(f){return {type:'Feature',geometry:f.geometry,properties:rowOf(f)};})}));};
+
+  clip();
+})();
+</script>
+</body>
+</html>
