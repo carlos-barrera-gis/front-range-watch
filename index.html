@@ -34,6 +34,8 @@ header .sub{color:var(--muted);font-size:13px;flex:1 1 320px}
 .yr select{background:var(--navy2);color:var(--ivory);border:1px solid var(--line);border-radius:4px;font:600 13px var(--f-m);padding:3px 4px}
 .legend{position:absolute;left:12px;bottom:26px;z-index:700;background:rgba(15,27,45,.93);border:1px solid var(--line);border-radius:6px;padding:9px 11px;font-size:12.5px;max-width:250px}
 .legend h3{margin:0 0 6px;font:700 13px var(--f-d);letter-spacing:.08em;text-transform:uppercase;color:var(--gold)}
+.legend.collapsed ul{display:none}.legend.collapsed h3{margin:0}
+.layers{display:grid;grid-template-columns:1fr 1fr;gap:6px 12px}.layers label{display:flex;gap:6px;align-items:center;font-size:13px;cursor:pointer}
 .legend ul{list-style:none;margin:0;padding:0;display:grid;gap:4px}
 .legend li{display:flex;gap:8px;align-items:center}
 .sw{width:14px;height:14px;border-radius:50%;flex:0 0 14px;border:2px solid #0b1320}
@@ -97,7 +99,7 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
     <div class="yr r"><label for="selR">Right</label><select id="selR"></select></div>
     <div class="swipe" id="swipe"><div class="bar"></div><button class="knob" id="knob" aria-label="Drag to compare imagery dates. Use arrow keys to move.">⇆</button></div>
     <div class="legend">
-      <h3>Legend</h3>
+      <h3>Legend <button id="lgT" style="all:unset;cursor:pointer;font:600 11px var(--f-m);color:var(--cyan);margin-left:6px" aria-expanded="true">hide</button></h3>
       <ul>
         <li><span class="sw" style="background:var(--red)"></span>Project in WUI and within 1 mi of a burn scar</li>
         <li><span class="sw" style="background:var(--orange)"></span>Project in WUI</li>
@@ -132,6 +134,17 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
         <label><input type="checkbox" id="stOth" checked> Other</label>
       </div>
       <svg id="chart" viewBox="0 0 380 150" role="img" aria-label="Projects per year by wildfire exposure"></svg>
+    </section>
+
+    <section>
+      <h2>Map layers</h2>
+      <div class="layers">
+        <label><input type="checkbox" id="lyProj" checked> Planning projects</label>
+        <label><input type="checkbox" id="lyBurn" checked> Burn scars</label>
+        <label><input type="checkbox" id="lyWui" checked> WUI shading</label>
+        <label><input type="checkbox" id="lyFire" checked> Fire detections</label>
+      </div>
+      <p class="note">The county WUI layer covers much of central and northern El Paso County, so most growth there falls inside it.</p>
     </section>
 
     <section>
@@ -225,7 +238,7 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
   /* ---------- WUI overlay (county MapServer export, redrawn on pan/zoom) ---------- */
   var wuiImg=null;
   function wuiRefresh(){var b=map.getBounds(),s=map.getSize(),sw=L.CRS.EPSG3857.project(b.getSouthWest()),ne=L.CRS.EPSG3857.project(b.getNorthEast());
-    var dyn=[{id:0,source:{type:'mapLayer',mapLayerId:0},drawingInfo:{renderer:{type:'simple',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[240,140,40,115],outline:{type:'esriSLS',style:'esriSLSNull',color:[0,0,0,0],width:0}}}}}];
+    var dyn=[{id:0,source:{type:'mapLayer',mapLayerId:0},drawingInfo:{renderer:{type:'simple',symbol:{type:'esriSFS',style:'esriSFSSolid',color:[240,140,40,70],outline:{type:'esriSLS',style:'esriSLSNull',color:[0,0,0,0],width:0}}}}}];
     var url=q(EPC+'TetraTechWUI/MapServer/export',{bbox:[sw.x,sw.y,ne.x,ne.y].join(','),bboxSR:3857,imageSR:3857,size:s.x+','+s.y,format:'png32',transparent:'true',dynamicLayers:JSON.stringify(dyn),f:'image'});
     var next=L.imageOverlay(url,b,{pane:'wui',opacity:1,interactive:false});
     next.once('load',function(){if(wuiImg&&wuiImg!==next)map.removeLayer(wuiImg);wuiImg=next;});next.addTo(map);}
@@ -236,15 +249,15 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
     L.geoJSON(j,{interactive:false,style:{color:'#F3EEE3',weight:2,dashArray:'2 6',fill:false,opacity:.8}}).addTo(map);}).catch(function(){});
 
   /* ---------- burn scars ---------- */
-  var FIRES=[];
+  var FIRES=[],burnLayer=L.layerGroup().addTo(map);
   var firesP=get('NIFC fire perimeters',q(NIFC,{where:'1=1',geometry:CBOX.join(','),geometryType:'esriGeometryEnvelope',inSR:4326,spatialRel:'esriSpatialRelIntersects',outFields:'INCIDENT,FIRE_YEAR,GIS_ACRES',outSR:4326,maxAllowableOffset:.0002,f:'geojson'})).then(function(j){
     var seen={};
     j.features.forEach(function(f){var p=f.properties,k=(p.INCIDENT||'')+'|'+p.FIRE_YEAR;if(!f.geometry)return;if(!seen[k]||(p.GIS_ACRES||0)>(seen[k].properties.GIS_ACRES||0))seen[k]=f;});
     FIRES=Object.keys(seen).map(function(k){return seen[k];}).filter(function(f){return /^\d{4}$/.test(String(f.properties.FIRE_YEAR))&&(f.properties.INCIDENT||'')!==String(f.properties.FIRE_YEAR);});
     FIRES.forEach(function(f){f.bbox=bboxOf(f.geometry);var p=f.properties;
-      L.geoJSON(f,{style:{color:'#ff6a3d',weight:2,dashArray:'7 5',fillColor:'#ff6a3d',fillOpacity:.16}}).bindPopup('<b class="h">'+p.INCIDENT+' Fire · '+p.FIRE_YEAR+'</b>'+fmt(Math.round(p.GIS_ACRES||0))+' acres<br><span style="color:var(--muted)">NIFC perimeter</span>').addTo(map);
+      L.geoJSON(f,{style:{color:'#ff6a3d',weight:2,dashArray:'7 5',fillColor:'#ff6a3d',fillOpacity:.16}}).bindPopup('<b class="h">'+p.INCIDENT+' Fire · '+p.FIRE_YEAR+'</b>'+fmt(Math.round(p.GIS_ACRES||0))+' acres<br><span style="color:var(--muted)">NIFC perimeter</span>').addTo(burnLayer);
       var c=L.latLngBounds([[f.bbox[1],f.bbox[0]],[f.bbox[3],f.bbox[2]]]).getCenter();
-      L.marker(c,{interactive:false,icon:L.divIcon({className:'',html:'<div style="font:700 13px Barlow Condensed,Arial Narrow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#ffd9c9;text-shadow:0 0 3px #000,0 0 3px #000;white-space:nowrap;transform:translate(-50%,-50%)">'+p.INCIDENT+' '+p.FIRE_YEAR+'</div>',iconSize:[0,0]})}).addTo(map);
+      L.marker(c,{interactive:false,icon:L.divIcon({className:'',html:'<div style="font:700 13px Barlow Condensed,Arial Narrow,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#ffd9c9;text-shadow:0 0 3px #000,0 0 3px #000;white-space:nowrap;transform:translate(-50%,-50%)">'+p.INCIDENT+' '+p.FIRE_YEAR+'</div>',iconSize:[0,0]})}).addTo(burnLayer);
     });
     return FIRES;
   }).catch(function(){return [];});
@@ -343,6 +356,12 @@ h2{margin:0 0 8px;font:700 15px var(--f-d);letter-spacing:.08em;text-transform:u
   document.getElementById('dlCsv').onclick=function(){var rows=PROJ.map(rowOf),keys=Object.keys(rows[0]);save('front_range_watch_projects.csv','text/csv',[keys.join(',')].concat(rows.map(function(r){return keys.map(function(k){var v=r[k];v=v==null?'':String(v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',');})).join('\n'));};
   document.getElementById('dlGeo').onclick=function(){save('front_range_watch_projects.geojson','application/geo+json',JSON.stringify({type:'FeatureCollection',features:PROJ.map(function(f){return {type:'Feature',geometry:f.geometry,properties:rowOf(f)};})}));};
 
+  function tog(id,lyr){document.getElementById(id).onchange=function(e){var l=typeof lyr==='function'?lyr():lyr;if(!l)return;e.target.checked?map.addLayer(l):map.removeLayer(l);};}
+  tog('lyProj',markers);tog('lyBurn',burnLayer);tog('lyFire',fireLayer);
+  document.getElementById('lyWui').onchange=function(e){map.getPane('wui').style.display=e.target.checked?'':'none';};
+  var lg=document.querySelector('.legend'),lgT=document.getElementById('lgT');
+  lgT.onclick=function(){var c=lg.classList.toggle('collapsed');lgT.textContent=c?'show':'hide';lgT.setAttribute('aria-expanded',String(!c));};
+  if(window.matchMedia('(max-width:900px)').matches)lgT.click();
   clip();
 })();
 </script>
